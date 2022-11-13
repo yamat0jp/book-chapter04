@@ -17,7 +17,6 @@ type
   TGridWorld = class
   private
     action_space: TArray<integer>;
-    action_meaning: array [0 .. 3] of string;
     function GetHeight: integer;
     function GetWidth: integer;
     function GetReward_Map(X, Y: integer): Extended;
@@ -26,12 +25,13 @@ type
     FReward: TArrayExt;
   public
     move, goal, wall, start, agent: TPoint;
+    action_meaning: array [0 .. 3] of string;
     constructor Create;
     destructor Destroy; override;
     function actions: TArray<integer>;
     function states: TArray<TPoint>;
     function next_state(state: TPoint; action: integer): TPoint;
-    function reward(state, next: TPoint; action: integer): Extended;
+    function reward(state: TPoint; action: integer; next: TPoint): Extended;
     procedure reset;
     function step(action: integer; out next: TPoint;
       out reward: Extended): Boolean;
@@ -57,6 +57,12 @@ procedure policy_iter(env: TGridWorld; gamma: Extended;
   const threshold: Extended; const isRender: Boolean; var p: TArrayActions;
   var V: TArrayExt);
 
+procedure value_iter_onestep(var V: TArrayExt; env: TGridWorld;
+  gamma: Extended);
+
+procedure value_iter(var V: TArrayExt; env: TGridWorld; gamma: Extended;
+  const threshold: Extended = 0.001; const isRender: Boolean = True);
+
 implementation
 
 uses Math, Unit1;
@@ -80,7 +86,7 @@ begin
     begin
       action := action_prob.key;
       next_state := env.next_state(state, action);
-      r := env.reward(state, next_state, action);
+      r := env.reward(state, action, next_state);
       new_V := new_V + action_prob.value *
         (r + gamma * V[next_state.X, next_state.Y]);
     end;
@@ -143,7 +149,7 @@ begin
     for var action in env.actions do
     begin
       next_state := env.next_state(state, action);
-      r := env.reward(state, next_state, action);
+      r := env.reward(state, action, next_state);
       value := r + gamma * V[next_state.X, next_state.Y];
       act.key := action;
       act.value := value;
@@ -177,6 +183,66 @@ begin
     Form1.FormPaint(nil);
     p := new_p;
   until isRender;
+end;
+
+function max(values: TArray<Extended>): Extended;
+begin
+  result := NegInfinity;
+  for var value in values do
+    if result < value then
+      result := value;
+end;
+
+procedure value_iter_onestep(var V: TArrayExt; env: TGridWorld;
+  gamma: Extended);
+var
+  action_values: TArray<Extended>;
+  next_state: TPoint;
+  r, value: Extended;
+begin
+  for var state in env.states do
+  begin
+    if state = env.goal then
+    begin
+      V[state.X, state.Y] := 0;
+      continue;
+    end;
+    action_values := [];
+    for var action in env.actions do
+    begin
+      next_state := env.next_state(state, action);
+      r := env.reward(state, action, next_state);
+      value := r + gamma * V[next_state.X, next_state.Y];
+      action_values := action_values + [value];
+    end;
+    V[state.X, state.Y] := max(action_values);
+  end;
+end;
+
+procedure value_iter(var V: TArrayExt; env: TGridWorld; gamma: Extended;
+  const threshold: Extended = 0.001; const isRender: Boolean = True);
+var
+  old_V: TArrayExt;
+  delta, temp: Extended;
+begin
+  SetLength(old_V, env.width, env.height);
+  while True do
+  begin
+    if isRender then
+      Form1.FormPaint(nil);
+    for var state in env.states do
+      old_V[state.X, state.Y] := V[state.X, state.Y];
+    value_iter_onestep(V, env, gamma);
+    delta := 0;
+    for var state in env.states do
+    begin
+      temp := Abs(V[state.X, state.Y] - old_V[state.X, state.Y]);
+      if delta < temp then
+        delta := temp;
+    end;
+    if delta < threshold then
+      break;
+  end;
 end;
 
 { TGridWorld }
@@ -233,7 +299,7 @@ var
   action_move_map: TArray<TPoint>;
   move: TPoint;
 begin
-  action_move_map := [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)];
+  action_move_map := [Point(0, -1), Point(0, 1), Point(-1, 0), Point(1, 0)];
   move := action_move_map[action];
   result := Point(state.X + move.X, state.Y + move.Y);
   if (result.X < 0) or (result.X >= width) or (result.Y < 0) or
@@ -248,7 +314,8 @@ begin
   agent := start;
 end;
 
-function TGridWorld.reward(state, next: TPoint; action: integer): Extended;
+function TGridWorld.reward(state: TPoint; action: integer; next: TPoint)
+  : Extended;
 var
   s: TPoint;
 begin
@@ -291,7 +358,7 @@ var
 begin
   s := agent;
   next := next_state(s, action);
-  reward := Self.reward(s, next, action);
+  reward := Self.reward(s, action, next);
   result := next = goal;
   agent := next;
 end;

@@ -44,6 +44,14 @@ object Form1: TForm1
           item
             Action = Action1
             Caption = '&Action1'
+          end
+          item
+            Action = Action2
+            Caption = 'A&ction2'
+          end
+          item
+            Action = reset
+            Caption = '&reset'
           end>
         ActionBar = ActionToolBar1
       end>
@@ -53,6 +61,14 @@ object Form1: TForm1
     object Action1: TAction
       Caption = 'Action1'
       OnExecute = Action1Execute
+    end
+    object Action2: TAction
+      Caption = 'Action2'
+      OnExecute = Action2Execute
+    end
+    object reset: TAction
+      Caption = 'reset'
+      OnExecute = resetExecute
     end
   end
 end
